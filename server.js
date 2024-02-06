@@ -1,10 +1,19 @@
 import express from "express";
+import cors from "cors";
 import "./loadEnvironment.js";
 import "express-async-errors";
 import scheduler from "./routes/scheduler.js";
 
 const PORT = process.env.PORT || 5050;
 const app = express();
+
+const corsOptions = {
+  origin: process.env.FRONTEND_URL,
+  optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 
 app.use(express.json());
 

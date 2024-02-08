@@ -3,9 +3,21 @@ import cors from "cors";
 import "./loadEnvironment.js";
 import "express-async-errors";
 import scheduler from "./routes/scheduler.js";
+import mongoose from "mongoose";
 
 const PORT = process.env.PORT || 5050;
 const app = express();
+
+// Append the database name before the query parameters in the connection string
+const mongoDB = `${process.env.ATLAS_URI.split("?")[0]}${process.env.DB_NAME}?${
+  process.env.ATLAS_URI.split("?")[1]
+}`;
+
+main().catch((err) => console.log(err));
+
+async function main() {
+  await mongoose.connect(mongoDB);
+}
 
 const corsOptions = {
   origin: process.env.FRONTEND_URL,

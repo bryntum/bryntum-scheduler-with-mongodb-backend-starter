@@ -1,9 +1,9 @@
-import { MongoClient } from "mongodb";
 import "./loadEnvironment.js";
-
-// Replace the following with your Atlas connection string
-const connectionString = process.env.ATLAS_URI || "";
-const client = new MongoClient(connectionString);
+import mongoose from "mongoose";
+import { resourceSchema } from "./models/resource.js";
+import { eventSchema } from "./models/event.js";
+import { assignmentSchema } from "./models/assignment.js";
+import { dependencySchema } from "./models/dependency.js";
 
 const resources = [
   { id: 1, name: "Peter" },
@@ -144,35 +144,68 @@ const dependencies = [
   },
 ];
 
-const schedulerData = {
-  events: {
-    rows: events,
-  },
-  resources: {
-    rows: resources,
-  },
-  assignments: {
-    rows: assignments,
-  },
-  dependencies: {
-    rows: dependencies,
-  },
-};
+// Create new ObjectIds for resources and events
+const resourceMap = new Map();
+resources.forEach((r) => {
+  resourceMap.set(r.id, new mongoose.Types.ObjectId());
+  r._id = resourceMap.get(r.id);
+});
+
+const eventMap = new Map();
+events.forEach((e) => {
+  eventMap.set(e.id, new mongoose.Types.ObjectId());
+  e._id = eventMap.get(e.id);
+});
+
+// Update assignments and dependencies with the new ObjectIds
+assignments.forEach((a) => {
+  a._id = new mongoose.Types.ObjectId();
+  a.eventId = eventMap.get(a.eventId);
+  a.resourceId = resourceMap.get(a.resourceId);
+});
+
+dependencies.forEach((d) => {
+  d._id = new mongoose.Types.ObjectId();
+  d.from = eventMap.get(d.from);
+  d.to = eventMap.get(d.to);
+});
 
 async function run() {
+  let session;
   try {
-    // Connect to the Atlas cluster
-    await client.connect();
-    const db = client.db(process.env.DB_NAME);
-    // Reference the "data" collection in the specified database
-    const col = db.collection("data");
+    // Append the database name before the query parameters in the connection string
+    const mongoDB = `${process.env.ATLAS_URI.split("?")[0]}${
+      process.env.DB_NAME
+    }?${process.env.ATLAS_URI.split("?")[1]}`;
+    await mongoose.connect(mongoDB);
+    // Define models after establishing the connection
+    const DbResource = mongoose.model("Resource", resourceSchema);
+    const DbEvent = mongoose.model("Event", eventSchema);
+    const DbAssignment = mongoose.model("Assignment", assignmentSchema);
+    const DbDependency = mongoose.model("Dependency", dependencySchema);
 
-    const result = await col.insertOne(schedulerData);
-    console.log("Data inserted successfully, document ID:", result.insertedId);
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    await Promise.all([
+      DbResource.insertMany(resources, { session }),
+      DbEvent.insertMany(events, { session }),
+      DbAssignment.insertMany(assignments, { session }),
+      DbDependency.insertMany(dependencies, { session }),
+    ]);
+
+    await session.commitTransaction();
+
+    console.log("Data inserted successfully");
   } catch (err) {
-    console.log(err.stack);
+    console.error(err.stack);
+    if (session) {
+      await session.abortTransaction();
+    }
   } finally {
-    await client.close();
+    if (session) {
+      session.endSession();
+    }
+    mongoose.connection.close();
   }
 }
 

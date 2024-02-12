@@ -171,7 +171,6 @@ dependencies.forEach((d) => {
 });
 
 async function run() {
-  let session;
   try {
     // Append the database name before the query parameters in the connection string
     const mongoDB = `${process.env.ATLAS_URI.split("?")[0]}${
@@ -184,27 +183,17 @@ async function run() {
     const DbAssignment = mongoose.model("Assignment", assignmentSchema);
     const DbDependency = mongoose.model("Dependency", dependencySchema);
 
-    const session = await mongoose.startSession();
-    session.startTransaction();
     await Promise.all([
-      DbResource.insertMany(resources, { session }),
-      DbEvent.insertMany(events, { session }),
-      DbAssignment.insertMany(assignments, { session }),
-      DbDependency.insertMany(dependencies, { session }),
+      DbResource.insertMany(resources),
+      DbEvent.insertMany(events),
+      DbAssignment.insertMany(assignments),
+      DbDependency.insertMany(dependencies),
     ]);
-
-    await session.commitTransaction();
 
     console.log("Data inserted successfully");
   } catch (err) {
     console.error(err.stack);
-    if (session) {
-      await session.abortTransaction();
-    }
   } finally {
-    if (session) {
-      session.endSession();
-    }
     mongoose.connection.close();
   }
 }
